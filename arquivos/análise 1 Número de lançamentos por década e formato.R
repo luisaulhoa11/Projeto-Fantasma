@@ -10,12 +10,14 @@
     #5) Variação da nota de engajamento pelo personagem que conseguiu capturar o monstro.
 #Pacotes----
 if (!require(tidyverse)) install.packages(c("tidyverse"))
+if (!require(xtable)) install.packages("xtable")
 
 library(tidyverse)
 library(lubridate)
 library(readxl)
 library(janitor)
 library(gridExtra)
+library(xtable)
 
 setwd("C:/Users/Admin/Documents/ESTAT/template/banco")
 banco_final<- read.csv2("banco_final.csv", sep = ",", header = TRUE) ##banco de dados
@@ -45,7 +47,7 @@ minhas_cores <- c("#A11D21", "#003366", "#CC9900",
 
 contagem_décadas_formato$decada <- substr(contagem_décadas_formato$decada, start = 1, stop = 4)
 
-# Imprimir a tabela formatada
+# tabela formatada
 knitr::kable(contagem_décadas_formato)
 
 decada
@@ -98,9 +100,13 @@ estatisticas <- banco_final %>%
   group_by(season) %>%
   summarise(Media = mean(imdb),
             Mediana = median(imdb),
-            Desvio_Padrao = sd(imdb))
+            Desvio_Padrao = sd(imdb),
+            Maximo = max(imdb)) %>%
+  pivot_longer(!season) %>%
+  pivot_wider(names_from = season, values_from = value)
 
-print(estatisticas)
+
+# print(estatisticas)
 
 #Análise 3: Top 3 terrenos mais frequentes pela ativação da armadilha
 table(banco_final$setting_terrain)
@@ -150,18 +156,18 @@ rename(banco_filtrado, "julia" = trap_work_first)
 #tabela de contingência
 tabela <- table(banco_filtrado$setting_terrain, banco_filtrado$trap_work_first)
 
-# Exibir a tabela de contingência
 print(tabela)
 View(tabela)
 
 
-# Criar o gráfico de colunas
+#  gráfico de colunas
 ggplot(banco_filtrado, aes(x = setting_terrain, fill=trap_work_first)) +
   geom_bar(position = "dodge") +
   labs(x = "Tipo de Terreno", y = "Ativação da armadilha", fill="Armadilha") +
   scale_fill_manual(values = minhas_cores, labels = c("Funcionou", "Não Funcionou")) +
   ggtitle("Ativação da Armadilha por Tipo de Terreno") +
   theme_minimal()
+
 
 #Análise 4 : Relação entre as notas IMDB e engajamento
 #Gráfico de dispersão
@@ -172,5 +178,86 @@ ggplot(banco_final, aes(x = imdb, y = engagement)) +
   ggtitle("Relação entre as notas IMDB e o Engajamento")
 
 #Análise 5:Variação da nota de engajamento pelo personagem que conseguiu capturar o monstro
+banco_final$caught_fred
+linhasfred<-which(banco_final$caught_fred == TRUE)
+View(linhasfred)
+engajamentofred <- banco_final$engagement[linhasfred]
+engajamentofred
+mean(engajamentofred)
+sd(engajamentofred)
 
+banco_final$caught_daphnie
+linhasdaphnie <- which(banco_final$caught_daphnie==TRUE)
+engajamentodaphnie<- banco_final$engagement[linhasdaphnie]
+engajamentodaphnie
+mean(engajamentodaphnie)
+sd(engajamentodaphnie)
+
+banco_final$caught_velma
+linhasvelma <- which(banco_final$caught_velma==TRUE)
+engajamentovelma<- banco_final$engagement[linhasvelma]
+engajamentovelma
+mean(engajamentovelma)
+sd(engajamentovelma)
+
+banco_final$caught_shaggy
+linhasshaggy <- which(banco_final$caught_shaggy==TRUE)
+engajamentoshaggy<- banco_final$engagement[linhasshaggy]
+engajamentoshaggy
+mean(engajamentoshaggy)
+sd(engajamentoshaggy)
+
+banco_final$caught_scooby
+linhasscooby <- which(banco_final$caught_scooby==TRUE)
+engajamentoscooby<- banco_final$engagement[linhasscooby]
+engajamentoscooby
+mean(engajamentoscooby)
+sd(engajamentoscooby)
+
+banco_final$caught_other
+linhasoutro <- which(banco_final$caught_other==TRUE)
+engajamentooutro<- banco_final$engagement[linhasoutro]
+engajamentooutro
+mean(engajamentooutro)
+sd(engajamentooutro)
+
+#gráfico
+engajamentos <- list(
+  "Fred" = engajamentofred,
+  "Daphnie" = engajamentodaphnie,
+  "Velma" = engajamentovelma,
+  "Shaggy" = engajamentoshaggy,
+  "Scooby" = engajamentoscooby,
+  "Outro" = engajamentooutro)
+
+
+#  gráfico boxplot
+
+boxplot(engajamentos,
+        main = "Engajamento por Personagem",
+        xlab = "Personagem",
+        ylab = "Engajamento",
+        col= minhas_cores,
+        border = "black")
+
+media<- round(c(mean(engajamentofred), mean(engajamentodaphnie), mean(engajamentovelma), mean(engajamentoshaggy), mean(engajamentoscooby), mean(engajamentooutro)), 2)
+desvio_padrao<- round(c(sd(engajamentofred), sd(engajamentodaphnie), sd(engajamentovelma), sd(engajamentoshaggy), sd(engajamentoscooby), sd(engajamentooutro)), 2)
+mediana<- round(c(median(engajamentofred), median(engajamentodaphnie), median(engajamentovelma), median(engajamentoshaggy), median(engajamentoscooby), median(engajamentooutro)), 2)
+
+# fiz um data.frame das medidas resumo
+estatisticas <- data.frame(
+  Personagem = c("Fred", "Daphnie", "Velma", "Shaggy", "Scooby", "Other"),
+  Media = media,
+  Desvio_Padrao = desvio_padrao,
+  Mediana = mediana)
+
+# Imprimir o data frame
+print(estatisticas)
+view(estatisticas)
+
+
+
+
+
+#
 
