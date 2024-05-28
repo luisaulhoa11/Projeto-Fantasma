@@ -22,6 +22,34 @@ library(xtable)
 setwd("C:/Users/Admin/Documents/ESTAT/template/banco")
 banco_final<- read.csv2("banco_final.csv", sep = ",", header = TRUE) ##banco de dados
 
+#TEMA DA ESTAT 
+estat_colors <- c(
+  "#A11D21", "#003366", "#CC9900",
+  "#663333", "#FF6600", "#CC9966",
+  "#999966", "#006606", "#008091",
+  "#041835", "#666666" )
+
+theme_estat <- function(...) {
+  theme <- ggplot2::theme_bw() +
+    ggplot2::theme(
+      axis.title.y = ggplot2::element_text(colour = "black", size = 12),
+      axis.title.x = ggplot2::element_text(colour = "black", size = 12),
+      axis.text = ggplot2::element_text(colour = "black", size = 9.5),
+      panel.border = ggplot2::element_blank(),
+      axis.line = ggplot2::element_line(colour = "black"),
+      legend.position = "top",
+      ...
+    )
+  return(
+    list(
+      theme,
+      scale_fill_manual(values = estat_colors),
+      scale_colour_manual(values = estat_colors)
+    )
+  )
+}
+
+
 #Análise 1 : Número de lançamentos a cada década por formato de lançamento----
 banco_final$date_aired <- as.Date(banco_final$date_aired)
 
@@ -38,11 +66,6 @@ print(contagem_decadas)
     TRUE ~ format))
 
 print(contagem_décadas_formato)
-#cores padronizadas
-minhas_cores <- c("#A11D21", "#003366", "#CC9900",
-                  "#663333", "#FF6600", "#CC9966",
-                  "#999966", "#006606", "#008091", 
-                  "#041835", "#666666")
 
 
 contagem_décadas_formato$decada <- substr(contagem_décadas_formato$decada, start = 1, stop = 4)
@@ -62,18 +85,18 @@ linhas_formato <- contagem_décadas_formato %>%
   unnest(c(linhas_decada, linhas_lancamentos)) %>%
   rename(decada_linha = linhas_decada, Numero_de_lancamentos = linhas_lancamentos)
 
-#gráfico de linhas com cores personalizadas
-ggplot(contagem_décadas_formato, aes(x = decada, y = Numero_de_lancamentos, colour = format)) +
-  geom_line(data = linhas_formato, aes(x = decada_linha, y = Numero_de_lancamentos, group = format), 
-            size = 1, # Espessura da linha
-            alpha = 0.7, # Transparência das linhas
-            linetype = "solid") + # Tipo de linha
-  geom_point() +
-  labs(x = "Década", y = "Número de Lançamentos", colour = "Formato") +
-  scale_colour_manual(values = minhas_cores) + # Definir cores personalizadas
-  theme_minimal()
+#gráfico de linhas com cores da estat
+ggplot(contagem_décadas_formato) +
+  aes(x = decada, y = Numero_de_lancamentos, group = format, colour = format) +
+  geom_line(size = 1) +
+  geom_point(size = 2) +
+  labs(x = "Década", y = "Número de lançamentos", colour= "Formato") +
+  theme_estat()
+ggsave("series_grupo.pdf", width = 158, height = 93, units = "mm")
 
 #Análise 2: Variação da nota IMDB por temporada dos episódios----
+season <- banco_filtrado$season
+
 
 # Filtrar as temporadas que não são do tipo série
 banco_filtrado <- subset(banco_final, !(season %in% c("Movie", "Crossover", "Special")))
@@ -82,49 +105,70 @@ banco_filtrado <- subset(banco_final, !(season %in% c("Movie", "Crossover", "Spe
 media_imdb_por_temporada <- aggregate(imdb ~ season, data = banco_filtrado, FUN = function(x) round(mean(x), 2))
 print(media_imdb_por_temporada)
 
-#boxplot
-ggplot(banco_filtrado, aes(x = season, y = imdb, fill = season)) +
-  geom_boxplot() +
-  scale_fill_manual(values = minhas_cores) +  # Aplica suas cores personalizadas
-  labs(x = "Temporada", y = "Nota IMDB", fill="temporada") +
-  ggtitle("Variação das notas IMDB por temporada")
+str(banco_filtrado$season)
 
+class(banco_filtrado$season)
+
+banco_filtrado$season <- factor(banco_filtrado$season)
+
+#BOXPLOT 
+ggplot(banco_filtrado) +
+  aes(x = season, y = imdb) +
+  geom_boxplot(fill = "#A11D21", width = 0.5) +
+  stat_summary(
+    fun = "mean", geom = "point", shape = 23, size = 3, fill = "white"
+  ) +
+  labs(x = "Temporada", y = "Nota IMDB") +
+  theme_estat()
+
+#BOXPLOT COM MEDIANAS CRESCENTES
+medianas_por_season <- aggregate(imdb ~ season, data = banco_filtrado, FUN = median)
+
+banco_filtrado$season <- factor(banco_filtrado$season, levels = medianas_por_season[order(medianas_por_season$imdb), "season"])
+
+ggplot(banco_filtrado) +
+  aes(x = season, y = imdb) +
+  geom_boxplot(fill = "#A11D21", width = 0.5) +
+  stat_summary(
+    fun = "mean", geom = "point", shape = 23, size = 3, fill = "white"
+  ) +
+  labs(x = "Temporada", y = "Nota IMDB") +
+  theme_estat()
 
 #desvio padrão 
 
 desvio_padrao_por_temporada <- aggregate(imdb ~ season, data = banco_filtrado, FUN = function(x) round(sd(x), 2))
 print(desvio_padrao_por_temporada)
 
+
+#TABELA
+
 estatisticas <- banco_final %>%
   filter(season %in% c("1", "2", "3", "4")) %>%
   group_by(season) %>%
-  summarise(Media = mean(imdb),
-            Mediana = median(imdb),
-            Desvio_Padrao = sd(imdb),
-            Maximo = max(imdb)) %>%
+  summarise("Média" = mean(imdb),
+            "Desvio_Padrão" = sd(imdb),
+            "Variância" = var(imdb),
+            "Mínimo" = min(imdb),
+            "1ª Quartil" = quantile(imdb, probs = 0.25),
+            "Mediana" = median(imdb),
+            "3ª Quartil" = quantile(imdb, probs = 0.75),
+            "Máximo" = max(imdb)) %>%
   pivot_longer(!season) %>%
   pivot_wider(names_from = season, values_from = value)
 
+print(estatisticas)
 
-# print(estatisticas)
+print( xtable(estatisticas, caption="Estatísticas das notas IMDB por temporada", label="tab:estatisticas_temporada"),
+       include.rownames=FALSE)
 
-#Análise 3: Top 3 terrenos mais frequentes pela ativação da armadilha
+#Análise 3: Top 3 terrenos mais frequentes pela ativação da armadilha----
 table(banco_final$setting_terrain)
 #Urban,Rural,Forest
 terrenos <- c("Urbano", "Rural", "Floresta")
 frequencias <- c(267, 109, 48)
 densidade_frequencia <- frequencias / sum(frequencias)
 dados <- data.frame(terrenos, densidade_frequencia)
-#Gráfico de pizza
-proporcoes <- round(frequencias / sum(frequencias) * 100, 1)
- ggplot(dados, aes(x = "", y = frequencias, fill = terrenos)) +
-  geom_bar(stat = "identity", width = 1) +
-  coord_polar("y", start = 0) +
-  labs(title = "Terrenos Mais Frequentes (Proporções)", fill = "Terreno") +
-  theme_void() +
-  scale_fill_manual(values = minhas_cores) +
-  geom_text(aes(label = paste0(terrenos, "\n", proporcoes, "%")), position = position_stack(vjust = 0.5))
- 
 frequência_Urban <- 267/603
 frequência_Rural <- 109/603
 frequência_Forest <- 48/603
@@ -138,15 +182,6 @@ frequência_total <- c(frequência_Urban, frequência_Rural, frequência_Forest)
 dados <- data.frame(terrenos = c("Urbano", "Rural", "Floresta"),
                     Frequencia = c(frequência_Urban, frequência_Rural, frequência_Forest))
 
-# Gráfico de barras frequência dos 3 em relação ao total
-densidade_Urban <- frequencia_Urban / total_frequencias
-densidade_Rural <- frequencia_Rural / total_frequencias
-densidade_Forest <- frequencia_Forest / total_frequencias
-ggplot(dados, aes(x = terrenos, y = Frequencia, fill = terrenos)) +
-  geom_bar(stat = "identity") +
-  scale_fill_manual(values = minhas_cores) +
-  labs(title = "Frequência dos Top 3 Terrenos em Relação ao Total", x = "Terreno", y = "Frequência") +
-  theme_minimal()
 
 terrenosfreq <- c("Urban", "Rural", "Forest")
 banco_filtrado <- banco_final %>%
@@ -157,34 +192,93 @@ rename(banco_filtrado, "julia" = trap_work_first)
 tabela <- table(banco_filtrado$setting_terrain, banco_filtrado$trap_work_first)
 
 print(tabela)
+
 View(tabela)
 
+ajustes<- banco_filtrado%>%
+  mutate(trap_work_first = case_when(
+    trap_work_first%>% str_detect("FALSE") ~ "Não funcionou",
+    trap_work_first%>% str_detect("TRUE") ~ "Funcionou"
+  )) %>%
+  group_by( setting_terrain, trap_work_first) %>%
+  summarise(freq = n()) %>%
+  mutate(
+    freq_relativa = round(freq / sum(freq) * 100,1))
 
-#  gráfico de colunas
-ggplot(banco_filtrado, aes(x = setting_terrain, fill=trap_work_first)) +
-  geom_bar(position = "dodge") +
-  labs(x = "Tipo de Terreno", y = "Ativação da armadilha", fill="Armadilha") +
-  scale_fill_manual(values = minhas_cores, labels = c("Funcionou", "Não Funcionou")) +
-  ggtitle("Ativação da Armadilha por Tipo de Terreno") +
-  theme_minimal()
+porcentagens <- str_c(ajustes$freq_relativa, "%") %>% str_replace("
+\\.", ",")
+legendas <- str_squish(str_c(ajustes$freq, " (", porcentagens, ")")
+)
+ggplot(ajustes) +
+  aes(
+    x = fct_reorder(setting_terrain, freq, .desc = T), y = freq,
+    fill = trap_work_first, label = legendas
+  ) +
+  geom_col(position = position_dodge2(preserve = "single", padding =
+                                        0)) +
+  geom_text(
+    position = position_dodge(width = .9),
+    vjust = -0.5, hjust = 0.5,
+    size = 3
+  ) +
+  labs(x = "Transmissão", y = "Frequência", fill="Armadilha") +
+  theme_estat()
+ggsave("colunas-bi-freq.pdf", width = 158, height = 93, units = "mm")16
 
-
-#Análise 4 : Relação entre as notas IMDB e engajamento
+#Análise 4 : Relação entre as notas IMDB e engajamento----
 #Gráfico de dispersão
 ggplot(banco_final, aes(x = imdb, y = engagement)) +
-  geom_point(color= "#A11D21") +
+  geom_point(color= "#A11D21",size = 2) +
   scale_color_manual(values = minhas_cores) +
   labs(x = "Notas IMDB", y = "Engajamento") +
-  ggtitle("Relação entre as notas IMDB e o Engajamento")
+  theme_estat()
+ggsave("disp_uni.pdf", width = 158, height = 93, units = "mm")
+24
+#quadro resumo da variável engajamento
+medidasengajamento <- banco_filtrado%>%
+  group_by(engagement) %>%
+  summarise("Média" = mean(engagement),
+            "Desvio_Padrão" = sd(engagement),
+            "Variância" = var(engagement),
+            "Mínimo" = min(engagement),
+            "1ª Quartil" = quantile(engagement, probs = 0.25),
+            "Mediana" = median(engagement),
+            "3ª Quartil" = quantile(engagement, probs = 0.75),
+            "Máximo" = max(engagement)) %>%
+  
+
+mean(banco_filtrado$engagement)
+sd(banco_filtrado$engagement)
+var(banco_filtrado$engagement)
+min(banco_filtrado$engagement)
+quantile(banco_filtrado$engagement, probs=0.25)
+median(banco_filtrado$engagement)
+quantile(banco_filtrado$engagement,probs=0.75)
+max(banco_filtrado$engagement)
+
+#quadro resumo da variável notas do IMDB
+mean(banco_filtrado$imdb)
+sd(banco_filtrado$imdb)
+var(banco_filtrado$imdb)
+min(banco_filtrado$imdb)
+quantile(banco_filtrado$imdb, probs=0.25)
+median(banco_filtrado$imdb)
+quantile(banco_filtrado$imdb,probs=0.75)
+max(banco_filtrado$imdb)
 
 #Análise 5:Variação da nota de engajamento pelo personagem que conseguiu capturar o monstro
 banco_final$caught_fred
 linhasfred<-which(banco_final$caught_fred == TRUE)
-View(linhasfred)
 engajamentofred <- banco_final$engagement[linhasfred]
 engajamentofred
 mean(engajamentofred)
 sd(engajamentofred)
+var(engajamentofred)
+min(engajamentofred)
+quantile(engajamentofred, probs = 0.25)
+median(engajamentofred)
+quantile(engajamentofred, probs=0.75)
+max(engajamentofred)
 
 banco_final$caught_daphnie
 linhasdaphnie <- which(banco_final$caught_daphnie==TRUE)
@@ -192,6 +286,12 @@ engajamentodaphnie<- banco_final$engagement[linhasdaphnie]
 engajamentodaphnie
 mean(engajamentodaphnie)
 sd(engajamentodaphnie)
+var(engajamentodaphnie)
+min(engajamentodaphnie)
+quantile(engajamentodaphnie,probs=0.25)
+median(engajamentodaphnie)
+quantile(engajamentodaphnie,probs=0,75)
+max(engajamentodaphnie)
 
 banco_final$caught_velma
 linhasvelma <- which(banco_final$caught_velma==TRUE)
@@ -199,6 +299,12 @@ engajamentovelma<- banco_final$engagement[linhasvelma]
 engajamentovelma
 mean(engajamentovelma)
 sd(engajamentovelma)
+var(engajamentovelma)
+min(engajamentovelma)
+quantile(engajamentovelma,probs=0.25)
+median(engajamentovelma)
+quantile(engajamentovelma,probs=0.75)
+max(engajamentovelma)
 
 banco_final$caught_shaggy
 linhasshaggy <- which(banco_final$caught_shaggy==TRUE)
@@ -206,6 +312,13 @@ engajamentoshaggy<- banco_final$engagement[linhasshaggy]
 engajamentoshaggy
 mean(engajamentoshaggy)
 sd(engajamentoshaggy)
+var(engajamentoshaggy)
+min(engajamentoshaggy)
+quantile(engajamentoshaggy,probs=0.25)
+median(engajamentoshaggy)
+quantile(engajamentoshaggy,probs=0.75)
+max(engajamentoshaggy)
+
 
 banco_final$caught_scooby
 linhasscooby <- which(banco_final$caught_scooby==TRUE)
@@ -213,6 +326,13 @@ engajamentoscooby<- banco_final$engagement[linhasscooby]
 engajamentoscooby
 mean(engajamentoscooby)
 sd(engajamentoscooby)
+var(engajamentoscooby)
+min(engajamentoscooby)
+quantile(engajamentoscooby,probs=0.25)
+median(engajamentoscooby)
+quantile(engajamentoscooby,probs=0,75)
+max(engajamentoscooby)
+
 
 banco_final$caught_other
 linhasoutro <- which(banco_final$caught_other==TRUE)
@@ -220,9 +340,15 @@ engajamentooutro<- banco_final$engagement[linhasoutro]
 engajamentooutro
 mean(engajamentooutro)
 sd(engajamentooutro)
+var(engajamentooutro)
+min(engajamentooutro)
+quantile(engajamentooutro,probs=0.25)
+median(engajamentooutro)
+quantile(engajamentooutro,probs=0.75)
+max(engajamentooutro)
 
 #gráfico
-engajamentos <- list(
+engajamento <- list(
   "Fred" = engajamentofred,
   "Daphnie" = engajamentodaphnie,
   "Velma" = engajamentovelma,
@@ -230,34 +356,57 @@ engajamentos <- list(
   "Scooby" = engajamentoscooby,
   "Outro" = engajamentooutro)
 
-
-#  gráfico boxplot
-
-boxplot(engajamentos,
-        main = "Engajamento por Personagem",
-        xlab = "Personagem",
-        ylab = "Engajamento",
-        col= minhas_cores,
-        border = "black")
-
-media<- round(c(mean(engajamentofred), mean(engajamentodaphnie), mean(engajamentovelma), mean(engajamentoshaggy), mean(engajamentoscooby), mean(engajamentooutro)), 2)
-desvio_padrao<- round(c(sd(engajamentofred), sd(engajamentodaphnie), sd(engajamentovelma), sd(engajamentoshaggy), sd(engajamentoscooby), sd(engajamentooutro)), 2)
-mediana<- round(c(median(engajamentofred), median(engajamentodaphnie), median(engajamentovelma), median(engajamentoshaggy), median(engajamentoscooby), median(engajamentooutro)), 2)
-
-# fiz um data.frame das medidas resumo
-estatisticas <- data.frame(
-  Personagem = c("Fred", "Daphnie", "Velma", "Shaggy", "Scooby", "Other"),
-  Media = media,
-  Desvio_Padrao = desvio_padrao,
-  Mediana = mediana)
-
-# Imprimir o data frame
-print(estatisticas)
-view(estatisticas)
+engajamentos 
 
 
+# Criar um dataframe com os valores de engajamento de cada personagem
+dados_engajamento <- data.frame(
+  Personagem = rep(c("Fred", "Daphnie", "Velma", "Shaggy", "Scooby", "Outro"), 
+                   c(length(engajamentofred), 
+                     length(engajamentodaphnie), 
+                     length(engajamentovelma), 
+                     length(engajamentoshaggy), 
+                     length(engajamentoscooby), 
+                     length(engajamentooutro))),
+  Engajamento = c(engajamentofred, engajamentodaphnie, engajamentovelma, 
+                  engajamentoshaggy, engajamentoscooby, engajamentooutro)
+)
+
+# Criar boxplots
+ggplot(dados_engajamento, aes(x = Personagem, y = Engajamento)) +
+  geom_boxplot(fill = "#A11D21", width = 0.5) +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(x = "Personagem", y = "Engajamento") +
+  theme_estat()
 
 
+# Calcular as medianas de cada personagem
+medianas <- c(
+  median(engajamentofred),
+  median(engajamentodaphnie),
+  median(engajamentovelma),
+  median(engajamentoshaggy),
+  median(engajamentoscooby),
+  median(engajamentooutro))
 
-#
+# Criar um dataframe com as medianas e os nomes dos personagens
+dados_medianas <- data.frame(
+  Personagem = c("Fred", "Daphnie", "Velma", "Shaggy", "Scooby", "Outro"),
+  Mediana = medianas)
+
+# Ordenar o dataframe das medianas
+dados_medianas <- dados_medianas[order(dados_medianas$Mediana), ]
+
+# Reordenar os valores de engajamento de acordo com a ordem das medianas
+dados_engajamento$Personagem <- factor(dados_engajamento$Personagem, levels = dados_medianas$Personagem)
+
+# Definir a ordem desejada das personagens com base nas medianas
+ordem_personagens <- dados_medianas$Personagem[order(dados_medianas$Mediana)]
+
+# Criar o boxplot
+ggplot(dados_engajamento, aes(x = factor(Personagem, levels = ordem_personagens), y = Engajamento)) +
+  geom_boxplot(fill = "#A11D21", width = 0.5) +
+  stat_summary(fun = "mean", geom = "point", shape = 23, size = 3, fill = "white") +
+  labs(x = "Personagem", y = "Engajamento") +
+  theme_estat()
 
